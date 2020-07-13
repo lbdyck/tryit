@@ -1,5 +1,5 @@
 /* --------------------  rexx procedure  -------------------- */
- ver = "3.4"
+  ver = "3.7"
 /* Name:      TryIT                                           *
  *                                                            *
  * Function:  Used to test the file currently being edited    *
@@ -8,7 +8,7 @@
  *            Supported member types are:                     *
  *               REXX Execs                                   *
  *               CLISTs                                       *
- *               ISPF Panels                                  *
+ *               ISPF Panels (normal, tutorial, popup, table) *
  *               Assembler Code                               *
  *               JCL (if a syntax checker is defined)         *
  *                                                            *
@@ -74,6 +74,8 @@
  *            Add APPL xxxx to have the panel selected in     *
  *            ISPF application ID xxxx.                       *
  *                                                            *
+ *            Add TRAP to capture and view the output         *
+ *                                                            *
  * NOTE:      This command is invoked as an ISPF Edit Macro   *
  *                                                            *
  * Restrictions: This tool will *NOT* work to test ISPF Edit  *
@@ -91,6 +93,9 @@
  * Author:    Lionel B. Dyck                                  *
  *                                                            *
  * History:                                                   *
+ *            2020-07-13 - 3.7 - Fix typo                     *
+ *            2020-07-13 - 3.6 - Support Table Panels         *
+ *            2020-04-23 - 3.5 - Add TRAP option              *
  *            2019-07-02 - 3.4 - If Tut then don't addpop     *
  *            2019-05-02 - 3.3 - Improved non-Edit message    *
  *            2019-04-26 - 3.2 - Look for )END and set Panel  *
@@ -166,7 +171,7 @@
  *                                                            *
  * ---------------------------------------------------------- */
 
- signal on novalue name sub_novalue
+  signal on novalue name sub_novalue
 /* ----------------------------------------- *
  * Determine our environment and get details *
  * ----------------------------------------- */
@@ -181,46 +186,53 @@
     exit 16
   end
   Address ISREdit
- "Macro (parms) NOPROCESS"
- if rc > 0 then do
-  Address ISPexec
-      zedsmsg = "Must be in Edit Mode"
-      zedlmsg = "This utility is an edit macro",
-                "and will only work when editing",
-                "or viewing a PDS(MBR) or Sequential",
-                "file.  It is not a TSO command."
-      "SETMSG MSG(isrz001)"
-      Exit 8
-   END
- if parms = '?' then do
+  "Macro (parms) NOPROCESS"
+  if rc > 0 then do
+    Address ISPexec
+    zedsmsg = "Must be in Edit Mode"
+    zedlmsg = "This utility is an edit macro",
+      "and will only work when editing",
+      "or viewing a PDS(MBR) or Sequential",
+      "file.  It is not a TSO command."
+    "SETMSG MSG(isrz001)"
+    Exit 8
+  END
+  if parms = '?' then do
     Address ISPExec 'Select pgm(isptutor) parm(#tryit)'
     Exit
-    end
+  end
   Address ISPexec
   "CONTROL ERRORS CANCEL"
   Address ISREdit
- "(Dataset) = dataset"
- "(Member)  = member"
- "(changed) = data_changed"
+  "(Dataset) = dataset"
+  "(Member)  = member"
+  "(changed) = data_changed"
+
+  if wordpos('TRAP',translate(parms)) > 0 then do
+    trap = 1
+    p = wordpos('TRAP',translate(parms))
+    parms = delword(parms,p,1)
+  end
+  else trap = 0
 
 /* ------------------ *
  * Setup our defaults *
  * ------------------ */
- orig_mem = member
+  orig_mem = member
  /* reorder values and add some generic patterns                  */
  /* 1st word is used to set type if llq matches a generic pattern */
- clist = "CLIST   SYSPROC CMDPROC"
- rexx  = "REXX    SYSEXEC  EXEC"
- asm   = "ASM     ASSEM"
- jcl   = "JCL     CNTL"
- panel = "PANEL   PANELS          ISPPLIB *PLIB *PENU *PDEU"
- skl   = "SKL     SKEL     SKELS  ISPSLIB *SLIB *SENU *SDEU"
- if length(sysvar("syspref")) = 0 ,
+  clist = "CLIST   SYSPROC CMDPROC"
+  rexx  = "REXX    SYSEXEC  EXEC"
+  asm   = "ASM     ASSEM"
+  jcl   = "JCL     CNTL"
+  panel = "PANEL   PANELS          ISPPLIB *PLIB *PENU *PDEU"
+  skl   = "SKL     SKEL     SKELS  ISPSLIB *SLIB *SENU *SDEU"
+  if length(sysvar("syspref")) = 0 ,
     then hlq = sysvar("sysuid")
-    else hlq = sysvar("syspref")
- parse value "" with null type zerrsm zerrlm proc ,
-                     tobject tlisting pp ,
-                     tut appl temp newappl popup
+  else hlq = sysvar("syspref")
+  parse value "" with null type zerrsm zerrlm proc ,
+    tobject tlisting pp table ,
+    tut appl temp newappl popup
 
 /* ------------------------------------------------------- *
  * *custom*                                                *
@@ -233,7 +245,7 @@
  * Note: ISPF Panels will always be copied into a temp     *
  *       panel library because of an ISPF restriction.     *
  * ------------------------------------------------------- */
- Temp_Opt = 1
+  Temp_Opt = 1
 
 /* ------------------------------------------------------- *
  * *custom*                                                *
@@ -244,7 +256,7 @@
  *            e.g JCL_Check = "PREP" (for JCL Prep)        *
  *            e.g JCL_Check = "!JCK" (for CA JCL Check     *
  * ------------------------------------------------------- */
- JCL_Check = "!JCK"
+  JCL_Check = "!JCK"
  /* JCL_Check = "Prep" */
  /* JCL_Check = "JEM"  */
  /* JCL_Check = "!JCK" */
@@ -252,138 +264,138 @@
 /* -------------------------------- *
  * Get the data from the first line *
  * -------------------------------- */
- "(line) = line 1"
- uline = translate(line)
- "(lst) = line .zlast"
+  "(line) = line 1"
+  uline = translate(line)
+  "(lst) = line .zlast"
   ulast = translate(lst)
 
 /* -------------------------------------------- *
  * Dynamically determine if this is a REXX Exec *
  * -------------------------------------------- */
- if wordpos("REXX",uline) > 0 then do
+  if wordpos("REXX",uline) > 0 then do
     pc  = pos("/*",uline)
     pcr = wordindex(uline,wordpos("REXX",uline))
     if pc > 0
-       then if pcr > pc then do
-            type     = "REXX"
-            alt_type = "exec"
-            end
+    then if pcr > pc then do
+      type     = "REXX"
+      alt_type = "exec"
     end
+  end
 
 /* ------------------------------------ *
  * Dynamically determine if this is ASM *
  * ------------------------------------ */
- if wordpos("CSECT",uline) > 0 |,
+  if wordpos("CSECT",uline) > 0 |,
     wordpos("TITLE",uline) > 0 then type = "ASM"
 
 /* -------------------------------------------- *
  * Dynamically determine if this is a TSO clist *
  * -------------------------------------------- */
- if ((wordpos("PROC",uline) > 0) &,
-     (datatype(word(line,2)) = "NUM")) then do
+  if ((wordpos("PROC",uline) > 0) &,
+    (datatype(word(line,2)) = "NUM")) then do
     type     = "CLIST"
     alt_type = "clist"
-    end
+  end
 
 /* ------------------------------------ *
  * Dynamically determine if this is JCL *
  * ------------------------------------ */
- if left(line,2) = "//" then type = "JCL"
+  if left(line,2) = "//" then type = "JCL"
 
 /* ---------------------------------------------- *
  * Dynamically determine if this is an ISPF Panel *
  * ---------------------------------------------- */
- Select
-   When word(uline,1) = ")ATTR"   then type = "PANEL"
-   When word(uline,1) = ")PANEL"  then type = "PANEL"
-   When word(uline,1) = ")CCSID"  then type = "PANEL"
-   When word(uline,1) = ")PROC"   then type = "PANEL"
-   When word(uline,1) = ")BODY"   then type = "PANEL"
-   When word(uline,1) = ")INIT"   then type = "PANEL"
-   When word(uline,1) = ")REINIT" then type = "PANEL"
-   When word(ulast,1) = ")END"    then type = "PANEL"
-   When substr(line,3,5) = "PREP:"
-        then type = "PANEL"
-   Otherwise nop
-   end
+  Select
+    When word(uline,1) = ")ATTR"   then type = "PANEL"
+    When word(uline,1) = ")PANEL"  then type = "PANEL"
+    When word(uline,1) = ")CCSID"  then type = "PANEL"
+    When word(uline,1) = ")PROC"   then type = "PANEL"
+    When word(uline,1) = ")BODY"   then type = "PANEL"
+    When word(uline,1) = ")INIT"   then type = "PANEL"
+    When word(uline,1) = ")REINIT" then type = "PANEL"
+    When word(ulast,1) = ")END"    then type = "PANEL"
+    When substr(line,3,5) = "PREP:"
+    then type = "PANEL"
+    Otherwise nop
+  end
 
 /* ---------------------------------------------- *
  * Dynamically determine if this is an ISPF Skel  *
  * ---------------------------------------------- */
- Select
-   When word(uline,1) = ")CM"     then type = "SKL"
-   When word(uline,1) = ")SET"    then type = "SKL"
-   When word(uline,1) = ")SEL"    then type = "SKL"
-   Otherwise nop
-   end
+  Select
+    When word(uline,1) = ")CM"     then type = "SKL"
+    When word(uline,1) = ")SET"    then type = "SKL"
+    When word(uline,1) = ")SEL"    then type = "SKL"
+    Otherwise nop
+  end
 
 /* ----------------------- *
  * determine the file type *
  * ----------------------- */
- td = translate(dataset,' ','.')
- w = words(td)
- llq = word(td,w)
+  td = translate(dataset,' ','.')
+  w = words(td)
+  llq = word(td,w)
 
- if type = null then do
+  if type = null then do
     Select
       When wordpos(word(td,w),rexx)  > 0 then do
-          type     = "REXX"
-          alt_type = "exec"
-          end
+        type     = "REXX"
+        alt_type = "exec"
+      end
       When wordpos(word(td,w),panel) > 0 then do
-          type     = "PANEL"
-          end
+        type     = "PANEL"
+      end
       When wordpos(word(td,w),skl)   > 0 then do
-          type     = "SKL"
-          end
+        type     = "SKL"
+      end
       When wordpos(word(td,w),clist) > 0 then do
-           type    = "CLIST"
-          alt_type = "clist"
-          end
+        type    = "CLIST"
+        alt_type = "clist"
+      end
       When wordpos(word(td,w),asm)   > 0 then do
-           type    = "ASM"
-          end
+        type    = "ASM"
+      end
       Otherwise nop
-      end /* end select */
-   end
+    end /* end select */
+  end
 
- if type = null then do
-     type = sub_generic_llq(llq)
-   end
- if type = null then do
-                type     = "REXX"
-                alt_type = "exec"
-                end
+  if type = null then do
+    type = sub_generic_llq(llq)
+  end
+  if type = null then do
+    type     = "REXX"
+    alt_type = "exec"
+  end
 
 /* ----------------------------------------------------- *
  * Verify that the code has been saved before proceeding *
  * ----------------------------------------------------- */
- if wordpos(type,"PANEL JCL SKL") = 0 then
-    If changed = "YES" then do
-       If temp_opt = 1 then do
-          temp        = 0
-          Call find_temp
-          Address ISREdit ,
-             "Create" tempmem ".zf .zl"
-          temp   = 1
-          member = tempmem
-          end
-       else do
-            Address ISPExec
-            zedsmsg = "Warning source changed"
-            zedlmsg = "Please save" member "and",
-                      "try again."
-            "Setmsg msg(isrz001)"
-            exit 8
-            end
-       end
+  if wordpos(type,"PANEL JCL SKL") = 0 then
+  If changed = "YES" then do
+    If temp_opt = 1 then do
+      temp        = 0
+      Call find_temp
+      Address ISREdit ,
+        "Create" tempmem ".zf .zl"
+      temp   = 1
+      member = tempmem
+    end
+    else do
+      Address ISPExec
+      zedsmsg = "Warning source changed"
+      zedlmsg = "Please save" member "and",
+        "try again."
+      "Setmsg msg(isrz001)"
+      exit 8
+    end
+  end
 
- if wordpos(type,"PANEL SKL") > 0 then do
+  if wordpos(type,"PANEL SKL") > 0 then do
     ispfddt = "$"random(99999)
     ispfddo = "$"random(99999)
     Address TSO
     "Alloc f("ispfddt") unit(sysda) spa(5,5) dir(1)",
-       "recfm(f b) lrecl(80) blksize(27920)"
+      "recfm(f b) lrecl(80) blksize(27920)"
     "Alloc f("ispfddo") shr ds('"dataset"')"
     Address ISPExec
     "Lminit dataid(lmispf) ddname("ispfddt")"
@@ -392,34 +404,34 @@
     "(first) = linenum .zf"
     "(last)  = linenum .zl"
     do lr = first to last
-       "(record) = line" lr
-       Address ISPExec ,
-         "LmPut dataid("lmispf") MODE(INVAR)" ,
-               "DataLoc(record) DataLen(80)"
-       end
+      "(record) = line" lr
+      Address ISPExec ,
+        "LmPut dataid("lmispf") MODE(INVAR)" ,
+        "DataLoc(record) DataLen(80)"
+    end
     Address ISPExec
-       "LmmAdd dataid("lmispf") Member("member")"
-       "LmFree dataid("lmispf")"
+    "LmmAdd dataid("lmispf") Member("member")"
+    "LmFree dataid("lmispf")"
     Address TSO
-       call  bpxwdyn "concat ddlist("ispfddt","ispfddo") msg(2)"
+    call  bpxwdyn "concat ddlist("ispfddt","ispfddo") msg(2)"
     Address ISPExec
     select
       when ( type = "SKL" ) then ,
-       "Libdef ISPSLIB Library ID("ispfddt") Stack"
+        "Libdef ISPSLIB Library ID("ispfddt") Stack"
       otherwise ,
-       "Libdef ISPPLIB Library ID("ispfddt") Stack"
+        "Libdef ISPPLIB Library ID("ispfddt") Stack"
     end
-    end
+  end
 
 /* ------------------- *
  * Setup Errors Return *
  * ------------------- */
- Address ISPExec ,
+  Address ISPExec ,
     "Control Errors Return"
- types_libdef = "ASM other_types"
- If find(types_libdef,type) > 0 then do
+  types_libdef = "ASM other_types"
+  If find(types_libdef,type) > 0 then do
     Call setup_libdefs      /* Create ISPF libraries        */
-    end
+  end
 
 /* -------------------------------------- *
  * If type is Assembler then:             *
@@ -430,179 +442,195 @@
  * -> free data sets                      *
  * - browse assembly listing              *
  * -------------------------------------- */
- If type = "ASM" then do
+  If type = "ASM" then do
     Address ISPExec
     "Vget (tterm trent tauth tother" ,
-          "tmac1 tmac2 tmac3 tmac4" ,
-          "tlink tsyslib tloadlib)" ,
-          "Profile"
+      "tmac1 tmac2 tmac3 tmac4" ,
+      "tlink tsyslib tloadlib)" ,
+      "Profile"
     "Display Panel(tryitasm)"
     if rc > 0 then do
-       zedsmsg = "Cancelled"
-       zedlmsg = "Assembly cancelled for" member ,
-                 "as your request."
-       "Setmsg msg(isrz001)"
-       end
+      zedsmsg = "Cancelled"
+      zedlmsg = "Assembly cancelled for" member ,
+        "as your request."
+      "Setmsg msg(isrz001)"
+    end
     else do
-       "Vput (tterm trent tauth tother" ,
-             "tmac1 tmac2 tmac3 tmac4" ,
-             "tlink tsyslib tloadlib)" ,
-             "Profile"
-       Address TSO
-       tlisting = "'"hlq"."orig_mem".LIST'"
-       tobject  = "'"hlq"."orig_mem".OBJ'"
-       ttermds  = "'"hlq"."orig_mem".term'"
-       _x_ = check_dataset(""tlisting" DELETE")
-       _x_ = check_dataset(""tobject " DELETE")
-       _x_ = check_dataset(""ttermds " DELETE")
+      "Vput (tterm trent tauth tother" ,
+        "tmac1 tmac2 tmac3 tmac4" ,
+        "tlink tsyslib tloadlib)" ,
+        "Profile"
+      Address TSO
+      tlisting = "'"hlq"."orig_mem".LIST'"
+      tobject  = "'"hlq"."orig_mem".OBJ'"
+      ttermds  = "'"hlq"."orig_mem".term'"
+      _x_ = check_dataset(""tlisting" DELETE")
+      _x_ = check_dataset(""tobject " DELETE")
+      _x_ = check_dataset(""ttermds " DELETE")
 
-       if tmac1 = "*" then tmac1 = "'"dataset"'"
-       if tmac2 = "*" then tmac2 = "'"dataset"'"
-       if tmac3 = "*" then tmac3 = "'"dataset"'"
-       if tmac4 = "*" then tmac4 = "'"dataset"'"
-       tmacu = tmac1 tmac2 tmac3 tmac4
-       if pos(dataset,tmacu) = 0 then tmacu = "'"dataset"'"
-                                 else tmacu = null
+      if tmac1 = "*" then tmac1 = "'"dataset"'"
+      if tmac2 = "*" then tmac2 = "'"dataset"'"
+      if tmac3 = "*" then tmac3 = "'"dataset"'"
+      if tmac4 = "*" then tmac4 = "'"dataset"'"
+      tmacu = tmac1 tmac2 tmac3 tmac4
+      if pos(dataset,tmacu) = 0 then tmacu = "'"dataset"'"
+      else tmacu = null
 
       /* ------------------------------------ *
        * Add site dependent datasets          *
        * ------------------------------------ */
-       tmacs = null
-       tmac.5 = site_dependent_datasets("tmac5")
-       tmac.6 = site_dependent_datasets("tmac6")
-       tmac.7 = site_dependent_datasets("tmac7")
-       tmac.8 = site_dependent_datasets("tmac8")
-       tmac.9 = site_dependent_datasets("tmac9")
-       do i = 5 to 9
-          tmacs = tmacs" "tmac.i
-       end
-       tmacs = strip(tmacs)
-       msg_save = MSG("OFF")
-       "free fi(sysprint syslin syslib sysin systerm " ,
-               " sysut1 sysut2 sysut3)"
-       msg_reset = MSG(msg_save)
-       "Alloc f(sysprint) new spa(30,30) tr" ,
-         "dsname("tlisting") reuse"
-       "Alloc f(syslin) new spa(30,30) tr" ,
-         "dsname("tobject") reuse"
-       "Alloc f(syslib) ds(" ,
-                 tmac1 tmac2 tmac3 tmac4 tmacs tmacu ,
-                         ") shr reuse"
-       "Alloc f(sysut1) spa(30,30) tr"
-       "Alloc f(sysut2) spa(30,30) tr"
-       "Alloc f(sysut3) spa(30,30) tr"
-       "Alloc f(sysin) ds('"dataset"("member")') shr reuse"
-       if translate(tterm) = "TERM" then
-          "Alloc f(systerm) spa(15,15) tr ds("ttermds") new" ,
-                "recfm(f b) lrecl(80) reuse"
-       parm = null
-       if trent = "Yes" then parm = "RENT"
-       if tterm <> null then
-          if parm <> null
-             then parm = parm","tterm
-             else parm = tterm
-       if tother <> null then
-          if parm <> null
-             then parm = parm","tother
-             else parm = tother
-       Address ISPExec "Select Pgm(asma90) Parm("parm")"
-       return_code = rc
-       "Free f(sysut1 sysut2 sysut3 syslin sysprint syslib sysin)"
-       "Alloc f(sysin)    ds(*) reuse"
-       "Alloc f(sysprint) ds(*) reuse"
-       Address ISPExec
-       zedsmsg = "RC:" return_code
-       zedlmsg = orig_mem "has been assembled and ended with a",
-                "return code of" return_code
-                left(" ",20) zerrlm
+      tmacs = null
+      tmac.5 = site_dependent_datasets("tmac5")
+      tmac.6 = site_dependent_datasets("tmac6")
+      tmac.7 = site_dependent_datasets("tmac7")
+      tmac.8 = site_dependent_datasets("tmac8")
+      tmac.9 = site_dependent_datasets("tmac9")
+      do i = 5 to 9
+        tmacs = tmacs" "tmac.i
+      end
+      tmacs = strip(tmacs)
+      msg_save = MSG("OFF")
+      "free fi(sysprint syslin syslib sysin systerm " ,
+        " sysut1 sysut2 sysut3)"
+      msg_reset = MSG(msg_save)
+      "Alloc f(sysprint) new spa(30,30) tr" ,
+        "dsname("tlisting") reuse"
+      "Alloc f(syslin) new spa(30,30) tr" ,
+        "dsname("tobject") reuse"
+      "Alloc f(syslib) ds(" ,
+        tmac1 tmac2 tmac3 tmac4 tmacs tmacu ,
+        ") shr reuse"
+      "Alloc f(sysut1) spa(30,30) tr"
+      "Alloc f(sysut2) spa(30,30) tr"
+      "Alloc f(sysut3) spa(30,30) tr"
+      "Alloc f(sysin) ds('"dataset"("member")') shr reuse"
+      if translate(tterm) = "TERM" then
+      "Alloc f(systerm) spa(15,15) tr ds("ttermds") new" ,
+        "recfm(f b) lrecl(80) reuse"
+      parm = null
+      if trent = "Yes" then parm = "RENT"
+      if tterm <> null then
+      if parm <> null
+      then parm = parm","tterm
+      else parm = tterm
+      if tother <> null then
+      if parm <> null
+      then parm = parm","tother
+      else parm = tother
+      Address ISPExec "Select Pgm(asma90) Parm("parm")"
+      return_code = rc
+      "Free f(sysut1 sysut2 sysut3 syslin sysprint syslib sysin)"
+      "Alloc f(sysin)    ds(*) reuse"
+      "Alloc f(sysprint) ds(*) reuse"
+      Address ISPExec
+      zedsmsg = "RC:" return_code
+      zedlmsg = orig_mem "has been assembled and ended with a",
+        "return code of" return_code
+      left(" ",20) zerrlm
       "Setmsg msg(isrz001)"
-       if translate(tterm) = "TERM" then do
-          "Browse Dataset("ttermds")"
-          Address TSO
-          call msg "off"
-          "Delete" ttermds
-          "Alloc f(systerm) ds(*) reuse"
-          Address ISPExec
-          end
+      if translate(tterm) = "TERM" then do
+        "Browse Dataset("ttermds")"
+        Address TSO
+        call msg "off"
+        "Delete" ttermds
+        "Alloc f(systerm) ds(*) reuse"
+        Address ISPExec
+      end
       "Browse Dataset("tlisting")"
       if return_code < 8 then
       if tloadlib <> null then do
-         Address TSO
-         parse value "" with auth rent
-         if tauth = "Yes" then auth = "AC(1)"
-         if trent = "Yes" then rent = "RENT REUS"
-         if left(tloadlib,1) = "'" ,
-            then do
-                 parse value tloadlib with "'"tloadlib"'"
-                 linkload = "'"tloadlib"("orig_mem")'"
-                 end
-            else linkload = tloadlib"("orig_mem")"
-         print = "'"hlq"."orig_mem".Linklist'"
+        Address TSO
+        parse value "" with auth rent
+        if tauth = "Yes" then auth = "AC(1)"
+        if trent = "Yes" then rent = "RENT REUS"
+        if left(tloadlib,1) = "'" ,
+          then do
+          parse value tloadlib with "'"tloadlib"'"
+          linkload = "'"tloadlib"("orig_mem")'"
+        end
+        else linkload = tloadlib"("orig_mem")"
+        print = "'"hlq"."orig_mem".Linklist'"
                                /* site dependent SYSLIBs */
                                /* i.e. SISPLOAD SADMMOD  */
-         syslib_free = "N"
-         tsyslibs = null
-         tsyslib.5 = site_dependent_datasets("tsyslib5")
-         tsyslib.6 = site_dependent_datasets("tsyslib6")
-         tsyslib.7 = site_dependent_datasets("tsyslib7")
-         tsyslib.8 = site_dependent_datasets("tsyslib8")
-         tsyslib.9 = site_dependent_datasets("tsyslib9")
-         do i = 5 to 9
-            tsyslibs = tsyslibs" "tsyslib.i
-         end
-         tsyslibs = strip(tsyslibs)
-         if tsyslib""tsyslibs <> null then do
-            "Alloc f(syslib) shr reuse ds("tsyslib  tsyslibs")"
-            syslib_free = "Y"
-         end
-         "Link" tobject "Load("linkload")" auth rent ,
-                "Print("print") xref map list let noterm"
-         zedsmsg = "RC:" rc
-         zedlmsg = "Linkage Editor completed with a return" ,
-                   "code of" rc
-         Address ISPExec
-         "Setmsg msg(isrz001)"
-         "Browse Dataset("print")"
-         Address TSO
-         call msg "off"
-         "Delete" print
-         if syslib_free = "Y" then
-            "Free f(syslib)"
-         end
+        syslib_free = "N"
+        tsyslibs = null
+        tsyslib.5 = site_dependent_datasets("tsyslib5")
+        tsyslib.6 = site_dependent_datasets("tsyslib6")
+        tsyslib.7 = site_dependent_datasets("tsyslib7")
+        tsyslib.8 = site_dependent_datasets("tsyslib8")
+        tsyslib.9 = site_dependent_datasets("tsyslib9")
+        do i = 5 to 9
+          tsyslibs = tsyslibs" "tsyslib.i
+        end
+        tsyslibs = strip(tsyslibs)
+        if tsyslib""tsyslibs <> null then do
+          "Alloc f(syslib) shr reuse ds("tsyslib  tsyslibs")"
+          syslib_free = "Y"
+        end
+        "Link" tobject "Load("linkload")" auth rent ,
+          "Print("print") xref map list let noterm"
+        zedsmsg = "RC:" rc
+        zedlmsg = "Linkage Editor completed with a return" ,
+          "code of" rc
+        Address ISPExec
+        "Setmsg msg(isrz001)"
+        "Browse Dataset("print")"
+        Address TSO
+        call msg "off"
+        "Delete" print
+        if syslib_free = "Y" then
+        "Free f(syslib)"
+      end
       parse value "" with zedsmsg zedlmsg
-       end
+    end
     if translate(tretain) = "NO" then do
-       if tobject  /= null then ,
-         _x_ = check_dataset(""tobject  " DELETE")
-       if tlisting /= null then ,
-         _x_ = check_dataset(""tlisting " DELETE")
-       end
+      if tobject  /= null then ,
+        _x_ = check_dataset(""tobject  " DELETE")
+      if tlisting /= null then ,
+        _x_ = check_dataset(""tlisting " DELETE")
+    end
     If find(types_libdef,type) > 0 then do
-       Call destroy_libdefs    /* Clean up temp library        */
-       end
-   end
+      Call destroy_libdefs    /* Clean up temp library        */
+    end
+  end
 
 /* ---------------------------------------------------- *
  * If CLIST or EXEC then:                               *
+ * -> Check the Trap variable and setup outtrap if 1    *
  * -> Altlib CLIST or EXEC library                      *
  * -> Execute the member passing any passed parms       *
  * -> Save the return code                              *
  * -> Free the Altlib                                   *
+ * -> if trap is 1 then view outtrap                    *
  * ---------------------------------------------------- */
- If pos(type,"REXX CLIST") > 0 then do
+  If pos(type,"REXX CLIST") > 0 then do
     Address TSO
     "Altlib Activate Application("alt_type")" ,
-           "Dataset('"dataset"')"
+      "Dataset('"dataset"')"
+    if trap = 1 then call outtrap 'trap.'
     "%"member parms
     return_code = right(rc,4,'0')
+    if trap = 1 then call outtrap 'off'
     "Altlib Deactivate Application("alt_type")"
-     xrc = right(D2X(return_code),4,'0')
-     zedsmsg = "RC:" return_code
-     zedlmsg = orig_mem" has been executed and ended with a",
-              "return code of" return_code "(x'"xrc"')" ,
-              left(" ",20) zerrlm
-     Address ISPExec
-   end
+    xrc = right(D2X(return_code),4,'0')
+    zedsmsg = "RC:" return_code
+    zedlmsg = orig_mem" has been executed and ended with a",
+      "return code of" return_code "(x'"xrc"')" ,
+      left(" ",20) zerrlm
+    Address ISPExec
+    'setmsg msg(isrz001)'
+    if trap = 1 then do
+      tdd = 'TRY'random(9999)
+      Address TSO
+      'alloc f('tdd') new spa(15,15) tr recfm(v b) lrecl(128)'
+      'execio * diskw 'tdd '(finis stem trap.'
+      Address ISPExec
+      'lminit dataid(ddb) ddname('tdd')'
+      'view dataid('ddb')'
+      'lmfree dataid('ddb')'
+      Address TSO 'Free f('tdd')'
+    end
+  end
 
 /* ---------------------------------------------------- *
  * If JCL then:                                         *
@@ -610,52 +638,52 @@
  *     - if null then message                           *
  *     - otherwise invoke it                            *
  * ---------------------------------------------------- */
- If pos(type,"JCL") > 0 then do
+  If pos(type,"JCL") > 0 then do
     if strip(jcl_check) = null then do
-       zedsmsg = "Not Supported"
-       zedlmsg = "There is no JCL Syntax Checker defined" ,
-                 "so this command will not work with JCL."
-       Address ISPExec
-       end
+      zedsmsg = "Not Supported"
+      zedlmsg = "There is no JCL Syntax Checker defined" ,
+        "so this command will not work with JCL."
+      Address ISPExec
+    end
     else do
-         Address ISREdit JCL_Check
-         return_code = rc
-         zedsmsg = "RC:" return_code
-         zedlmsg = orig_mem" has been syntax checked"
-         Address ISPExec
-         end
-   end
+      Address ISREdit JCL_Check
+      return_code = rc
+      zedsmsg = "RC:" return_code
+      zedlmsg = orig_mem" has been syntax checked"
+      Address ISPExec
+    end
+  end
 
- If pos(type,"SKL") > 0 then do
-   save_address = ADDRESS()
-   ADDRESS ISPEXEC
-   "CONTROL ERRORS CANCEL"
-   "FTCLOSE"
-   "FTOPEN TEMP"
-   "FTINCL " member
+  If pos(type,"SKL") > 0 then do
+    save_address = ADDRESS()
+    ADDRESS ISPEXEC
+    "CONTROL ERRORS CANCEL"
+    "FTCLOSE"
+    "FTOPEN TEMP"
+    "FTINCL " member
     return_code = rc
-   "FTCLOSE"
-   "LIBDEF ispslib "
+    "FTCLOSE"
+    "LIBDEF ispslib "
     call msg 'off'
     Address TSO "Free f("ispfddt")"
     Address TSO "Free f("ispfddo")"
-     if return_code > 0 then do
-        zedsmsg = zerrsm
-        zedlmsg = zerrlm
-        end
-     else do
-          zedsmsg = "RC: 0"
-          zedlmsg = "ISPF SKEL" orig_mem "has successfully" ,
-                   "been tested by the ISPF Display Service."
-          end
+    if return_code > 0 then do
+      zedsmsg = zerrsm
+      zedlmsg = zerrlm
+    end
+    else do
+      zedsmsg = "RC: 0"
+      zedlmsg = "ISPF SKEL" orig_mem "has successfully" ,
+        "been tested by the ISPF Display Service."
+    end
     " vget ( ztempf ztempn )"
     ztempdsn = "'"ztempf"'"
     ztempdd  =    ztempn
     "lminit dataid(idtemp)    ddname("ztempdd") enq(shr)"
     "edit   dataid("idtemp")  "
     "lmfree dataid("idtemp")"
-   ADDRESS value(save_address)
-   end
+    ADDRESS value(save_address)
+  end
 
 /* ------------------------------------- *
  * For ISPF Panels:                      *
@@ -670,51 +698,64 @@
  *  -> REMPOP if applicable              *
  *  -> Free the Libdef                   *
  * ------------------------------------- */
- if type = "PANEL" then do
+  if type = "PANEL" then do
     'vget (zscreenw)'
     parms = translate(parms)
     if wordpos("APPL",parms) > 0 then do
-       w = wordpos("APPL",parms)
-       appl = word(parms,w+1)
-       newappl = 'Newappl('appl')'
-       end
+      w = wordpos("APPL",parms)
+      appl = word(parms,w+1)
+      newappl = 'Newappl('appl')'
+    end
     Address ISPExec
     if appl = null then do
-       "Vget (Zapplid)"
-       appl = zapplid
-       end
+      "Vget (Zapplid)"
+      appl = zapplid
+    end
 
     if wordpos("POP",parms) = 0 then
-       if wordpos('TUT',parms) = 0 then do
-       Address ISREdit "Find 'WINDOW(' First"
-       if rc = 0 then do
-          'Addpop'
-          popup = 1
-          end
-          end
+    if wordpos('TUT',parms) = 0 then do
+      Address ISREdit "Find 'WINDOW(' First"
+      if rc = 0 then do
+        'Addpop'
+        popup = 1
+      end
+    end
 
     if wordpos("POP",parms) > 0 then do
-       parse value parms with . 'POP' row col .
-       if strip(row) /= null then pp = 'row('row')'
-       if strip(col) /= null then pp = 'row('row') column('col')'
-       "Addpop" pp
-          popup = 1
-       end
+      parse value parms with . 'POP' row col .
+      if strip(row) /= null then pp = 'row('row')'
+      if strip(col) /= null then pp = 'row('row') column('col')'
+      "Addpop" pp
+      popup = 1
+    end
 
     if wordpos("SEL",parms) > 0 ,
-       then "Select Panel("member") Passlib" ,
-             "Newappl("appl")"
+      then "Select Panel("member") Passlib" ,
+      "Newappl("appl")"
 
     else if wordpos("TUT",parms) > 0 ,
-       then do
-            if wordpos("APPL",parms) > 0 then do
-               w = wordpos("APPL",parms)
-               appl = word(parms,w+1)
-               newappl = 'Newappl('appl')'
-               end
-            "Select pgm(isptutor) parm("member")" newappl
-            end
-       else "Display Panel("member")"
+      then do
+      if wordpos("APPL",parms) > 0 then do
+        w = wordpos("APPL",parms)
+        appl = word(parms,w+1)
+        newappl = 'Newappl('appl')'
+      end
+      "Select pgm(isptutor) parm("member")" newappl
+    end
+    else do
+      Address ISREdit "Find ')MODEL' First"
+      if rc = 0 then table = 'T'time('s')
+    if table = null
+        then "Display Panel("member")"
+    else do
+         'TBCreate' table 'names(a b c) nowrite'
+         'TBDispl' table 'Panel('member')'
+         zedsmsg = zerrsm
+         zedlmsg = zerrlm
+         if rc > 0 then 'setmsg msg(isrz001)'
+         'TBEnd' table
+         end
+    end
 
     return_code = rc
 
@@ -723,16 +764,16 @@
     call msg 'off'
     Address TSO "Free f("ispfddt")"
     Address TSO "Free f("ispfddo")"
-     if return_code > 0 then do
-        zedsmsg = zerrsm
-        zedlmsg = zerrlm
-        end
-     else do
-          zedsmsg = "RC: 0"
-          zedlmsg = "ISPF Panel" orig_mem "has successfully" ,
-                   "been tested by the ISPF Display Service."
-          end
-     end
+    if return_code > 0 then do
+      zedsmsg = zerrsm
+      zedlmsg = zerrlm
+    end
+    else do
+      zedsmsg = "RC: 0"
+      zedlmsg = "ISPF Panel" orig_mem "has successfully" ,
+        "been tested by the ISPF Display Service."
+    end
+  end
 
 /* ------------------------------------------------- *
  * Now issue any messages and then test for any temp *
@@ -742,6 +783,7 @@
  * If temp member then delete it and exit            *
  * ------------------------------------------------- */
   Address ISPExec
+  if table = null then
   "Setmsg msg(isrz001)"
 
   /*  clean up - delete tempmem member */
@@ -761,20 +803,20 @@
  * member name if temp_opt is set to 0.          *
  * Try 10 times for available member name        *
  * --------------------------------------------- */
- Find_Temp:
- do try = 1 to 10
+Find_Temp:
+  do try = 1 to 10
     tempmem = "ZYX"Random(999)
     if sysdsn("'"dataset"("tempmem")'") = "MEMBER NOT FOUND"
-       then return 0
- end
+    then return 0
+  end
 
- zedsmsg = "Severe Error"
- zedlmsg = "Tryit attempted to allocate a temporary member" ,
-           "to test" member "and was unsuccessful. Contact" ,
-           "systems programming."
- Address ISPExec
- "Setmsg msg(isrz001)"
- Exit 8
+  zedsmsg = "Severe Error"
+  zedlmsg = "Tryit attempted to allocate a temporary member" ,
+    "to test" member "and was unsuccessful. Contact" ,
+    "systems programming."
+  Address ISPExec
+  "Setmsg msg(isrz001)"
+  Exit 8
 
 /* --------------------------------------------------------*
  * *custom*                                                *
@@ -783,71 +825,71 @@
  *   SYSLIBs  i.e. SISPLOAD SADMMOD                        *
  * ------------------------------------------------------- */
 site_dependent_datasets: procedure expose null
- s_dsn = null
- PARSE UPPER ARG s_type .
- select
-  when (s_type="TMAC5"    ) then s_dsn=null
-  when (s_type="TMAC6"    ) then s_dsn=null
-  when (s_type="TMAC7"    ) then s_dsn=null
-  when (s_type="TMAC8"    ) then s_dsn="'SYS1.MACLIB'"
-  when (s_type="TMAC9"    ) then s_dsn="'SYS1.MODGEN'"
-  when (s_type="TSYSLIB5" ) then s_dsn=null
-  when (s_type="TSYSLIB6" ) then s_dsn=null
-  when (s_type="TSYSLIB7" ) then s_dsn=null
-  when (s_type="TSYSLIB8" ) then s_dsn="'isp.sispload'"
-  when (s_type="TSYSLIB9" ) then s_dsn="'GDDM.SADMMOD'"
-  OTHERWISE NOP
- end
+  s_dsn = null
+  PARSE UPPER ARG s_type .
+  select
+    when (s_type="TMAC5"    ) then s_dsn=null
+    when (s_type="TMAC6"    ) then s_dsn=null
+    when (s_type="TMAC7"    ) then s_dsn=null
+    when (s_type="TMAC8"    ) then s_dsn="'SYS1.MACLIB'"
+    when (s_type="TMAC9"    ) then s_dsn="'SYS1.MODGEN'"
+    when (s_type="TSYSLIB5" ) then s_dsn=null
+    when (s_type="TSYSLIB6" ) then s_dsn=null
+    when (s_type="TSYSLIB7" ) then s_dsn=null
+    when (s_type="TSYSLIB8" ) then s_dsn="'isp.sispload'"
+    when (s_type="TSYSLIB9" ) then s_dsn="'GDDM.SADMMOD'"
+    OTHERWISE NOP
+  end
  /* mvs_sysplex = MVSVAR("SYSPLEX")  */
  /* mvs_sysname = MVSVAR("SYSNAME")  */
  /* site dependent LIBs */
- RETURN s_dsn
+  RETURN s_dsn
 
 /* ----------------------------------------------*
  * check existence of dataset                    *
  *   optionally delete / hdelete                 *
  * --------------------------------------------- */
 check_dataset: procedure expose null
- PARSE ARG listc_entry action_to_do .
- volser = null
- "NEWSTACK"
- x = outtrap("listc.",'*',"noconcat")
+  PARSE ARG listc_entry action_to_do .
+  volser = null
+  "NEWSTACK"
+  x = outtrap("listc.",'*',"noconcat")
   ADDRESS TSO "LISTC ENTRY(" listc_entry ") VOLUME"
- listc_rcode = RC
- x = outtrap("OFF")
- "DELSTACK"
- rcode = listc_rcode
- IF listc_rcode = 0 ,
- THEN DO
+  listc_rcode = RC
+  x = outtrap("OFF")
+  "DELSTACK"
+  rcode = listc_rcode
+  IF listc_rcode = 0 ,
+    THEN DO
           /* format: VOLSER------------volid      DEVTYPE-- ... */
-          DO i = 1 to listc.0
-              line_part1  = TRANSLATE(WORD(listc.i,1)," ","-")
-              IF WORD(line_part1,1) /= "VOLSER" then iterate
-              volser = WORD(line_part1,2)
-              LEAVE
-          END
+    DO i = 1 to listc.0
+      line_part1  = TRANSLATE(WORD(listc.i,1)," ","-")
+      IF WORD(line_part1,1) /= "VOLSER" then iterate
+      volser = WORD(line_part1,2)
+      LEAVE
+    END
+  end
+  if volser /= "" then
+  do
+    select
+      when ( action_to_do = "DELETE" ) then ,
+        do
+        msg_save = msg("OFF")
+        if left(volser,3) =" MIG" ,
+          then ADDRESS TSO "HDELETE "listc_entry" WAIT"
+        else ADDRESS TSO " DELETE "listc_entry" "
+        msg_reset  = msg(msg_save)
       end
- if volser /= "" then
-   do
-         select
-           when ( action_to_do = "DELETE" ) then ,
-             do
-               msg_save = msg("OFF")
-               if left(volser,3) =" MIG" ,
-               then ADDRESS TSO "HDELETE "listc_entry" WAIT"
-               else ADDRESS TSO " DELETE "listc_entry" "
-               msg_reset  = msg(msg_save)
-             end
-           otherwise nop
-         end
-   end
- RETURN rcode
+      otherwise nop
+    end
+  end
+  RETURN rcode
 
 /**************************************************************
 * check generic                                               *
 ***************************************************************/
 sub_generic_llq: procedure expose null ,
-                                  clist rexx asm jcl panel skl
+    clist rexx asm jcl panel skl
   parse arg _llq_  .
   _type_ = null
   n=0
@@ -860,68 +902,68 @@ sub_generic_llq: procedure expose null ,
   gentyp.0 = n
   _found_ = "NO"
   do idxg = 1 to gentyp.0
-     do idxw = 1 to words(gentyp.idxg.1)
-        type_value = word(gentyp.idxg.1,idxw)
-        if left(type_value,1) = "*" ,
+    do idxw = 1 to words(gentyp.idxg.1)
+      type_value = word(gentyp.idxg.1,idxw)
+      if left(type_value,1) = "*" ,
         then nop
-        else iterate
-        parse var type_value 1 . "*" type_value .
-        if right(_llq_,length(type_value)) = type_value ,
+      else iterate
+      parse var type_value 1 . "*" type_value .
+      if right(_llq_,length(type_value)) = type_value ,
         then do
-                _type_ = word(gentyp.idxg.1,1)
-                _found_ = "YES"
-                leave
-             end
-     end
-     if _found_ = "YES" then leave
+        _type_ = word(gentyp.idxg.1,1)
+        _found_ = "YES"
+        leave
+      end
+    end
+    if _found_ = "YES" then leave
   end
- return _type_
+  return _type_
 
 /**************************************************************
 * Trap uninitialized variables                                *
 ***************************************************************/
 Sub_Novalue:
-Say "Variable" ,
-   condition("Description") "undefined in line" sigl":"
-Say sourceline(sigl)
-if sysvar("sysenv") <> "FORE" then exit 8
-say "Report the error in this application along with the",
+  Say "Variable" ,
+    condition("Description") "undefined in line" sigl":"
+  Say sourceline(sigl)
+  if sysvar("sysenv") <> "FORE" then exit 8
+  say "Report the error in this application along with the",
     "syntax used."
-exit 8
+  exit 8
 
 /********************** setup_libdefs ********************************/
 setup_libdefs: Procedure Expose ddname /* Create and populate temp   */
                                        /* data set and libdef to it  */
-ddname = '$'right(time("s"),7,"0")     /* create unique ddname       */
+  ddname = '$'right(time("s"),7,"0")     /* create unique ddname       */
                                        /* Allocate data set          */
-Address tso "ALLOC NEW DEL F("ddname") DIR(1) SP(1) TR RECF(F B) ",
-            "BLKS(0) LRECL(80) REU"
-Address ispexec
-'LMINIT DATAID(DID) DDNAME('ddname') ENQ(EXCLU)'
-'LMOPEN DATAID(&DID) OPTION(OUTPUT)'
-a=sourceline()  /* get last line */
+  Address tso "ALLOC NEW DEL F("ddname") DIR(1) SP(1) TR RECF(F B) ",
+    "BLKS(0) LRECL(80) REU"
+  Address ispexec
+  'LMINIT DATAID(DID) DDNAME('ddname') ENQ(EXCLU)'
+  'LMOPEN DATAID(&DID) OPTION(OUTPUT)'
+  a=sourceline()  /* get last line */
 
 /* now try to find the start of the panel */
-do al = a to 1 by -1
-   line = sourceline(al)
-   a = al
-   if left(line,8) = "/*MEMBER" then leave
-   end
+  do al = a to 1 by -1
+    line = sourceline(al)
+    a = al
+    if left(line,8) = "/*MEMBER" then leave
+  end
 
-Do 1                                 /* read and create 1 member(s)  */
-  Do a=a to 999 Until substr(line,1,8)='/*MEMBER'
-    line = sourceline(a)
+  Do 1                                 /* read and create 1 member(s)  */
+    Do a=a to 999 Until substr(line,1,8)='/*MEMBER'
+      line = sourceline(a)
+    End
+    Parse Var line . memname .
+    Do a=a+1 to 999 While substr(line,1,2) /= '*/'
+      line = sourceline(a)
+      'LMPUT DATAID(&DID) MODE(INVAR) DATALOC(LINE) DATALEN(80)'
+    End
+    'LMMADD DATAID(&DID) MEMBER(&MEMNAME)'
   End
-  Parse Var line . memname .
-  Do a=a+1 to 999 While substr(line,1,2) /= '*/'
-    line = sourceline(a)
-    'LMPUT DATAID(&DID) MODE(INVAR) DATALOC(LINE) DATALEN(80)'
-  End
-  'LMMADD DATAID(&DID) MEMBER(&MEMNAME)'
-End
-'LMFREE DATAID(&DID)'
-"LIBDEF ISPPLIB LIBRARY ID("ddname") STACK" /* LIBDEF panels */
-Return
+  'LMFREE DATAID(&DID)'
+  "LIBDEF ISPPLIB LIBRARY ID("ddname") STACK" /* LIBDEF panels */
+  Return
 
 /************************ DESTROY_LIBDEFS ***************************/
 destroy_libdefs:
