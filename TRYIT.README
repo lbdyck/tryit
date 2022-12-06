@@ -1,29 +1,25 @@
-                            Users Guide for TRYIT
-                              by Lionel B. Dyck
+Users Guide for TRYIT
+by Lionel B. Dyck
 
-                             Revised Feb 09, 2020
+Revised Dec 06, 2022
 
 ===== Table of Contents
 
       Source and License
-      Installation
       Introduction
       Usage
 
 ===== Source and License
 
 The full source for TRYIT is distributed with the package, which may
-be found at http://www.lbdsoftware.com
+be found at:
+
+    https://www.lbdsoftware.com
+    https://github.com/lbdyck/tryit
+    https://cbttape.org in File 313 (check updates page 1st)
 
 License: This code is distributed under the GPL License which may
 be found at http://www.gnu.org/copyleft/gpl.html
-
-===== Introduction
-
-Copy the TRYIT.EXEC members into a library in your SYSPROC or SYSEXEC
-allcoation.
-
-Copy the TRYIT.PANELS members into a library in your ISPPLIB allocation.
 
 ===== Introduction
 
@@ -55,6 +51,10 @@ to TRYIT. If there are any errors in the panel or skeleton an ISPF
 message will be displayed and the error may then be corrected using ISPF
 Edit and TRYIT used once again to verify the panel or skeleton - all
 without the need to split the screen and invoke ISPF Test.
+
+For ISPF Table Display Panels that contain ROWS(SCAN) on the )MODEL
+statement, the ROWS(SCAN) will be removed since it does not work
+when using TRYIT.
 
 Note there are limitations to the Skeleton testing as variables and
 imbed tables may not be available.
