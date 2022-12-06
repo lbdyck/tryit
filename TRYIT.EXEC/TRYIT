@@ -1,5 +1,5 @@
 /* --------------------  rexx procedure  -------------------- */
-  ver = "3.7"
+  ver = "3.9"
 /* Name:      TryIT                                           *
  *                                                            *
  * Function:  Used to test the file currently being edited    *
@@ -28,9 +28,13 @@
  *            LIBDEF'd to ISPPLIB. This is so that other      *
  *            panels might be found if SEL or TUT is used.    *
  *            This is being done because ISPF will 'remember' *
- *            the bldl information for the panel and thus     *
+ *            the BLDL information for the panel and thus     *
  *            changes will not be reflected in subsequent     *
  *            uses of this exec.                              *
+ *                                                            *
+ *            For ISPF Panels with )MODEL the ROWS(SCAN)      *
+ *            keyword will be removed since scan does not     *
+ *            work under TRYIT.                               *
  *                                                            *
  *            The type of member is determined by:            *
  *            1) word REXX in record 1 for REXX Execs         *
@@ -93,6 +97,11 @@
  * Author:    Lionel B. Dyck                                  *
  *                                                            *
  * History:                                                   *
+ *            2022-12-06 - 3.9 - Remove ROWS(SCAN) in )MODEL  *
+ *                               for ISPF Panels              *
+ *            2021-05-07 - 3.8 - Replace non-display chars    *
+ *                               in TRYIT asm panel           *
+ *                             - Fixup the panel load routine *
  *            2020-07-13 - 3.7 - Fix typo                     *
  *            2020-07-13 - 3.6 - Support Table Panels         *
  *            2020-04-23 - 3.5 - Add TRAP option              *
@@ -405,6 +414,13 @@
     "(last)  = linenum .zl"
     do lr = first to last
       "(record) = line" lr
+      if left(record,6) = ')MODEL' then do
+         trec = translate(record)
+         if pos(' ROWS(SCAN)',trec) > 0 then do
+            parse value trec with ltrec 'ROWS(SCAN)'rtrec
+            record = ltrec rtrec
+            end
+         end
       Address ISPExec ,
         "LmPut dataid("lmispf") MODE(INVAR)" ,
         "DataLoc(record) DataLen(80)"
@@ -444,7 +460,7 @@
  * -------------------------------------- */
   If type = "ASM" then do
     Address ISPExec
-    "Vget (tterm trent tauth tother" ,
+    "Vget (tterm trent tauth tother tretain" ,
       "tmac1 tmac2 tmac3 tmac4" ,
       "tlink tsyslib tloadlib)" ,
       "Profile"
@@ -951,11 +967,11 @@ setup_libdefs: Procedure Expose ddname /* Create and populate temp   */
   end
 
   Do 1                                 /* read and create 1 member(s)  */
-    Do a=a to 999 Until substr(line,1,8)='/*MEMBER'
+    Do a=a to 9999 Until substr(line,1,8)='/*MEMBER'
       line = sourceline(a)
     End
     Parse Var line . memname .
-    Do a=a+1 to 999 While substr(line,1,2) /= '*/'
+    Do a=a+1 to 9999 While substr(line,1,2) /= '*/'
       line = sourceline(a)
       'LMPUT DATAID(&DID) MODE(INVAR) DATALOC(LINE) DATALEN(80)'
     End
@@ -976,51 +992,42 @@ destroy_libdefs:
 /*------------------------------------------------------------------*/
 
 /*MEMBER TRYITASM This is a panel ...
-)ATTR DEFAULT() FORMAT(MIX)
- 0A TYPE(NT)
- 0B TYPE(AB)
- 0C TYPE(NT) SKIP(ON)
- 0D TYPE(PS)
- 04 TYPE(ABSL) GE(ON)
- 05 TYPE(PT)
- 08 TYPE(CH)
- 09 TYPE(FP)
- 10 TYPE(ET)
- 11 TYPE(SAC)
- 16 TYPE(VOI) PADC(USER)
- 19 TYPE(DT)
- 22 TYPE(WASL) SKIP(ON) GE(ON)
- 26 AREA(SCRL) EXTEND(ON)
- 27 TYPE(CEF) PADC(USER) CKBOX(ON)
- 28 TYPE(NEF) CAPS(ON) PADC(USER)
+)ATTR  FORMAT(MIX)
+ @  TYPE(NT)
+ [  TYPE(PT)
+ ]  TYPE(CH)
+ $  TYPE(FP)
+ {  TYPE(DT)
+ ~  AREA(SCRL) EXTEND(ON)
+ `  TYPE(Input) CAPS(ON) PADC(USER)
 
 )BODY  CMD(ZCMD)
-Ž                     	       Try20 Assembler Dialog    Ž                      Ž
-Command ===>ˆZ                                                                Ž
-SAREA38                                                                       
+@                     [       Try20 Assembler Dialog    @                      @
+$Command ===>`Z                                                                @
+~SAREA38                                                                       ~
 )AREA SAREA38
-Ž
-—Assembler options:—                                                           Ž
-ŽŽTerm  . . .ˆZ     Ž(TERM or NOTERM)Ž
-ŽŽRent  . . .ˆZ  Ž   (YES  or NO)    Ž
-ŽŽOther . . .ˆZ                                                            Ž
-Ž
-—Additional Macro Libraries:—(* to include active dataset)                     Ž
-—Maclib===>ˆtmac1                                                            Ž
-Ž Ž    ===>ˆtmac2                                                            Ž
-Ž Ž    ===>ˆtmac3                                                            Ž
-Ž Ž    ===>ˆtmac4                                                            Ž
-Ž
-—Linkage Editor Options:—(in addition to assembler rent)
-ŽŽAuth  . . .ˆZ  Ž   (YES or NO - AC=1)  Ž
-ŽŽOther . . .ˆtlink                                                        Ž
-Ž
-—Syslib===>ˆtsyslib                                                          Ž
-—Load  ===>ˆtloadlib                                                         Ž
-Ž           (If blank then no link will be performed)                         Ž
-Ž                                                                             Ž
-ŽRetain Listing and Obj Data Sets===>ˆz  Ž (YES or NO)     Ž                Ž
-Ž                                                                             Ž
+@
+]Assembler options:]                                                           @
+@@$Term  . . .`Z     @{(TERM or NOTERM)@
+@@$Rent  . . .`Z  @   {(YES  or NO)    @
+@@$Other . . .`Z                                                            @
+@
+]Additional Macro Libraries:](* to include active dataset)                     @
+]Maclib$===>`tmac1                                                            @
+@ @$    ===>`tmac2                                                            @
+@ @$    ===>`tmac3                                                            @
+@ @$    ===>`tmac4                                                            @
+@
+]Linkage Editor Options:](in addition to assembler rent)
+@@$Auth  . . .`Z  @   {(YES or NO - AC=1)  @
+@@$Other . . .`tlink                                                        @
+@
+]Syslib$===>`tsyslib                                                          @
+]Load  $===>`tloadlib                                                         @
+@           (If blank then no link will be performed)                         @
+@                                                                             @
+@Retain Listing and Obj Data Sets$===>`z  @ {(YES or NO)     @                @
+@                                                                             @
 )Init
  .zvars = '(Zcmd tterm trent tother tauth tretain)'
  .cursor = zcmd
