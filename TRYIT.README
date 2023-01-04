@@ -1,7 +1,7 @@
 Users Guide for TRYIT
 by Lionel B. Dyck
 
-Revised Dec 06, 2022
+Revised Jan 04, 2023
 
 ===== Table of Contents
 
@@ -51,6 +51,9 @@ to TRYIT. If there are any errors in the panel or skeleton an ISPF
 message will be displayed and the error may then be corrected using ISPF
 Edit and TRYIT used once again to verify the panel or skeleton - all
 without the need to split the screen and invoke ISPF Test.
+
+For ISPF Panels with KEYLIST(xx) the )PANELS record will be replaced
+with just )PANELS to allow it to work under TRYIT.
 
 For ISPF Table Display Panels that contain ROWS(SCAN) on the )MODEL
 statement, the ROWS(SCAN) will be removed since it does not work
