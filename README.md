@@ -1,15 +1,9 @@
-Users Guide for TRYIT
+# Users Guide for TRYIT
 by Lionel B. Dyck
 
 Revised Dec 06, 2022
-
-===== Table of Contents
-
-      Source and License
-      Introduction
-      Usage
-
-===== Source and License
+ 
+#  Source and License
 
 The full source for TRYIT is distributed with the package, which may
 be found at:
@@ -21,7 +15,7 @@ be found at:
 License: This code is distributed under the GPL License which may
 be found at http://www.gnu.org/copyleft/gpl.html
 
-===== Introduction
+# Introduction
 
 TRYIT is an ISPF Edit command that is designed to be used to test an
 Assembler program, CLIST, REXX Exec, JCL, ISPF Panel or ISPF Skeleton
@@ -82,7 +76,7 @@ of REXX Exec assumed if all the tests fail. The tests include:
 This provides a very easy method for iterative testing and updating of
 the member until the member works as desired.
 
-===== Usage
+# Usage
 
 Use TRYIT from any ISPF Edit command line while editing a CLIST, REXX Exec, or
 ISPF Panel. The syntax is:
