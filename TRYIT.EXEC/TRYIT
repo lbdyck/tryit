@@ -1,5 +1,5 @@
 /* --------------------  rexx procedure  -------------------- */
-  ver = "4.1"
+  ver = "4.2"
 /* Name:      TryIT                                           *
  *                                                            *
  * Function:  Used to test the file currently being edited    *
@@ -102,6 +102,7 @@
  * Author:    Lionel B. Dyck                                  *
  *                                                            *
  * History:                                                   *
+ *            2023-06-29 - 4.2 - Update if used under EDIF    *
  *            2023-06-27 - 4.1 - With Panel test reset cursor *
  *                               to the command line          *
  *            2023-01-04 - 4.0 - Remove KEYLIST from )PANEL   *
@@ -352,8 +353,10 @@
  * ----------------------- */
   td = translate(dataset,' ','.')
   w = words(td)
-  llq = word(td,w)
+  if w > 0 then
+     llq = word(td,w)
 
+  if strip(dataset) /= null then
   if type = null then do
     Select
       When wordpos(word(td,w),rexx)  > 0 then do
